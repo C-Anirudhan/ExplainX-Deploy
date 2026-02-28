@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import useChatStore from "@/store/chatStore";
 import ChatMessage from "@/components/ChatMessage";
+import FileCard from "@/components/FileCard"; // 1. Import FileCard
 import { Loader2 } from "lucide-react";
 
 export default function ChatWindow() {
@@ -19,7 +20,7 @@ export default function ChatWindow() {
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto p-4 space-y-2"
+      className="flex-1 overflow-y-auto p-4 space-y-4" // Increased space-y for better card separation
       style={{ scrollBehavior: "smooth" }}
     >
       {messages.length === 0 ? (
@@ -37,9 +38,36 @@ export default function ChatWindow() {
         </div>
       ) : (
         <>
-          {messages.map((message, index) => (
-            <ChatMessage key={index} message={message} />
-          ))}
+          {messages.map((message, index) => {
+            // ----------------------------------------------------
+            // 2. LOGIC TO DETECT FILES (New & Old Legacy Text)
+            // ----------------------------------------------------
+            let fileData = message.file;
+
+            // Handle old "Uploaded: file.pdf" messages that don't have file metadata
+            if (!fileData && message.role === "user" && typeof message.content === "string" && message.content.startsWith("Uploaded:")) {
+              const filename = message.content.replace("Uploaded:", "").trim();
+              fileData = {
+                name: filename,
+                size: 0, 
+                type: filename.endsWith(".pdf") ? "application/pdf" : "video/mp4"
+              };
+            }
+
+            // ----------------------------------------------------
+            // 3. RENDER FILE CARD OR NORMAL MESSAGE
+            // ----------------------------------------------------
+            if (fileData) {
+              return (
+                <div key={index} className="flex justify-end px-2">
+                   {/* We wrap it in a div to align it to the right (User side) */}
+                   <FileCard file={fileData} />
+                </div>
+              );
+            }
+
+            return <ChatMessage key={index} message={message} />;
+          })}
 
           {isTyping && (
             <div className="flex gap-4 p-4 justify-start">
@@ -48,18 +76,9 @@ export default function ChatWindow() {
               </div>
               <div className="bg-gray-800 rounded-2xl px-4 py-3">
                 <div className="flex gap-1">
-                  <div
-                    className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"
-                    style={{ animationDelay: "0ms" }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"
-                    style={{ animationDelay: "150ms" }}
-                  ></div>
-                  <div
-                    className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"
-                    style={{ animationDelay: "300ms" }}
-                  ></div>
+                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></div>
+                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
+                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
                 </div>
               </div>
             </div>

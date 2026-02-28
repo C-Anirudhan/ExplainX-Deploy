@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Plus, Send, Loader2, X } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Plus, Send, Loader2, X, Mic, Square } from "lucide-react";
 import useChatStore from "@/store/chatStore";
 import apiService from "@/services/api";
 import { FILE_ACCEPT_STRING } from "@/utils/constants";
@@ -11,15 +11,71 @@ export default function InputBar() {
   const [showPicker, setShowPicker] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkInput, setLinkInput] = useState("");
+  
+  // 🎙️ NEW: Listening State
+  const [isListening, setIsListening] = useState(false);
+  
   const fileInputRef = useRef(null);
+  const recognitionRef = useRef(null); // Reference for Web Speech API
 
   // We only pull actions from the hook. 
   // We will read currentSessionId directly from state when needed to avoid stale closures.
-  const { addMessage, setTyping, addFile, persistSessions } = useChatStore();
+  const { addMessage, setTyping, addFile, persistSessions, fetchSessionsList } = useChatStore();
 
   // Helper to get the REAL current session ID
   const getActiveSessionId = () => {
     return useChatStore.getState().currentSessionId || localStorage.getItem("session_id");
+  };
+
+  // ----------------------------------------------------
+  // 🎙️ LIVE SPEECH TO TEXT LOGIC (Web Speech API)
+  // ----------------------------------------------------
+  useEffect(() => {
+    // Check for browser support
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;      // Keep listening even if user pauses
+      recognition.interimResults = true;  // Show results live as you speak
+      recognition.lang = "en-US";         // Force English
+
+      recognition.onresult = (event) => {
+        // Collect the full transcript from all results
+        const transcript = Array.from(event.results)
+          .map((result) => result[0].transcript)
+          .join("");
+
+        // Update the input bar live
+        setInputValue(transcript);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert("Your browser does not support Speech Recognition. Try Chrome, Edge, or Safari.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
   };
 
   // ---------- FILE UPLOAD ----------
@@ -120,7 +176,7 @@ export default function InputBar() {
   // ---------- CHAT SUBMIT ----------
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!inputValue.trim() || uploading) return;
+    if (!inputValue.trim() || uploading || isListening) return;
 
     const question = inputValue.trim();
     setInputValue("");
@@ -158,6 +214,10 @@ export default function InputBar() {
         });
       }
 
+      if (fetchSessionsList) {
+        fetchSessionsList(); 
+      }
+
       persistSessions();
     } catch (error) {
       addMessage({
@@ -179,7 +239,7 @@ export default function InputBar() {
           <button
             type="button"
             onClick={() => setShowPicker(!showPicker)}
-            disabled={uploading}
+            disabled={uploading || isListening}
             className="flex-shrink-0 p-2 text-gray-400 hover:text-purple-400 hover:bg-gray-800 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {uploading ? <Loader2 size={24} className="animate-spin" /> : <Plus size={24} />}
@@ -222,15 +282,32 @@ export default function InputBar() {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask a question about your uploaded content..."
+            placeholder={isListening ? "Listening..." : "Ask a question about your uploaded content..."}
             disabled={uploading}
-            className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none py-2 disabled:opacity-50"
+            className={`flex-1 bg-transparent text-white placeholder-gray-500 outline-none py-2 disabled:opacity-50 ${isListening ? "text-purple-200" : ""}`}
           />
 
+          {/* 🎙️ NEW: Mic Button (Left of Send) */}
+          <button
+            type="button"
+            onClick={toggleListening}
+            disabled={uploading}
+            className={`flex-shrink-0 p-2 rounded-lg text-white transition-all 
+              ${isListening ? "bg-red-500 animate-pulse" : "bg-gradient-to-r from-purple-600 to-pink-600"} 
+              disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {isListening ? (
+              <Square size={24} fill="white" />
+            ) : (
+              <Mic size={24} />
+            )}
+          </button>
+
+          {/* Send Button */}
           <button
             type="submit"
-            disabled={!inputValue.trim() || uploading}
-            className="flex-shrink-0 p-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!inputValue.trim() || uploading || isListening}
+            className="flex-shrink-0 p-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ml-2"
           >
             <Send size={24} />
           </button>

@@ -48,6 +48,16 @@ const useChatStore = create((set, get) => ({
       uploadedFiles: [...state.uploadedFiles, file],
     })),
 
+  fetchSessionsList: async () => {
+        try {
+          // This calls your backend to get the updated list
+          const sessions = await apiService.getSessions();
+          set({ sessions: sessions || [] });
+        } catch (error) {
+          console.error("Failed to fetch sessions:", error);
+        }
+      },
+
   // ============================
   // CREATE NEW SESSION (BACKEND)
   // ============================

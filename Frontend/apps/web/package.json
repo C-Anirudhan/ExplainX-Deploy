@@ -4,7 +4,10 @@
 	"type": "module",
 	"scripts": {
 		"dev": "react-router dev",
-		"typecheck": "react-router typegen && tsc --noEmit"
+		"typecheck": "react-router typegen && tsc --noEmit",
+		"build": "react-router build",
+		"predeploy": "npm run build", 
+  		"deploy": "gh-pages -d build/client"
 	},
 	"dependencies": {
 		"@auth/core": "^0.37.2",
@@ -82,6 +85,7 @@
 		"autoprefixer": "^10.4.21",
 		"babel-plugin-react-require": "^4.0.3",
 		"fast-glob": "^3.3.3",
+		"gh-pages": "^6.3.0",
 		"jsdom": "^26.1.0",
 		"micromatch": "^4.0.8",
 		"postcss": "^8.5.3",
