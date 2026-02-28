@@ -149,7 +149,7 @@ def api_sessions(current_user=Depends(get_current_user)):
         )
         
         if first_user_msg and "text" in first_user_msg:
-            title = first_user_msg["text"][:40]
+            title = s.get("title")
         else:
             title = "New Conversation"
 
@@ -163,51 +163,95 @@ def api_sessions(current_user=Depends(get_current_user)):
     return res
 
 # ============================================================
-# PIPELINES
+# PIPELINES (FIXED: Added 'name' key for compatibility)
 # ============================================================
 
-def process_video_pipeline(session_id, user_email, input_path, ext):
-    filename = os.path.basename(input_path)
+def process_video_pipeline(session_id, user_email, input_path, ext, original_name):
+    filename = os.path.basename(input_path) # System UUID
+    file_size = os.path.getsize(input_path)
     
-    # Run ingestion logic
+    # 1. Ingest
     gen_json(filename).main()
-    VectorDB(filename).ingest_json()
-    summary = LLM().summarize_video(filename)
+    VectorDB(filename, video_id=session_id).ingest_json()
+    summary = LLM().summarize_video(session_id)
     
-    # FIX: Merged duplicate "$push" keys into one dictionary
+    # 2. Create the "Card" Message
+    user_file_msg = {
+        "role": "user",
+        "text": f"Uploaded: {original_name}",
+        "file": {
+            "name": original_name, 
+            "size": file_size, 
+            "type": "video/mp4"
+        },
+        "time": datetime.utcnow()
+    }
+
+    # 3. Update DB (FIXED: Added "name": filename back)
     sessions_col.update_one(
         {"_id": session_id},
         {
             "$push": {
-                "files": {"name": filename, "ext": ext},
-                "messages": {"role": "assistant", "text": summary, "time": datetime.utcnow()}
+                "files": {
+                    "name": filename,         # <--- RESTORED THIS (Prevents KeyError)
+                    "system_name": filename, 
+                    "user_name": original_name, 
+                    "ext": ext
+                },
+                "messages": {
+                    "$each": [
+                        user_file_msg, 
+                        {"role": "assistant", "text": summary, "time": datetime.utcnow()}
+                    ]
+                }
             }
         }
     )
     return summary
 
-def process_pdf_ppt_pipeline(session_id, user_email, input_path, ext):
-    filename = os.path.basename(input_path)
+def process_pdf_ppt_pipeline(session_id, user_email, input_path, ext, original_name):
+    filename = os.path.basename(input_path) # System UUID
+    file_size = os.path.getsize(input_path) if os.path.exists(input_path) else 0
     
-    # Run ingestion logic
+    # 1. Ingest
     Pdf2Json(filename).extract()
     ChromaMultimodalDB(session_id, filename).ingest_text()
     
-    # Even without a summary, we must confirm upload to the user and DB
     msg_text = "Document Uploaded Successfully..."
     
-    # FIX: Merged duplicate "$push" keys into one dictionary
+    # 2. Create the "Card" Message
+    user_file_msg = {
+        "role": "user",
+        "text": f"Uploaded: {original_name}",
+        "file": {
+            "name": original_name, 
+            "size": file_size, 
+            "type": "application/pdf"
+        },
+        "time": datetime.utcnow()
+    }
+    
+    # 3. Update DB (FIXED: Added "name": filename back)
     sessions_col.update_one(
         {"_id": session_id},
         {
             "$push": {
-                "files": {"name": filename, "ext": ext},
-                "messages": {"role": "assistant", "text": msg_text, "time": datetime.utcnow()}
+                "files": {
+                    "name": filename,         # <--- RESTORED THIS (Prevents KeyError)
+                    "system_name": filename, 
+                    "user_name": original_name, 
+                    "ext": ext
+                },
+                "messages": {
+                    "$each": [
+                        user_file_msg,
+                        {"role": "assistant", "text": msg_text, "time": datetime.utcnow()}
+                    ]
+                }
             }
         }
     )
     return msg_text
-
 # ============================================================
 # UPLOAD
 # ============================================================
@@ -216,30 +260,64 @@ def process_pdf_ppt_pipeline(session_id, user_email, input_path, ext):
 def upload_file(session_id: str = Form(...), file: UploadFile = File(...), current_user=Depends(get_current_user)):
     session = sessions_col.find_one({"_id":session_id,"user_email":current_user["email"]})
     if not session: raise HTTPException(403,"Invalid session")
-
+    
     ext = os.path.splitext(file.filename)[1].lower()
+    original_name = file.filename # Capture the original name
+    
     path = os.path.join(UPLOAD_DIR,f"{uuid.uuid4()}{ext}")
     
     with open(path,"wb") as f: shutil.copyfileobj(file.file,f)
 
     if ext in video_extensions:
-        summary = process_video_pipeline(session_id, current_user["email"], path, ext)
+        # Pass original_name to pipeline
+        summary = process_video_pipeline(session_id, current_user["email"], path, ext, original_name)
     
     elif ext in [".pdf",".ppt",".pptx"]:
-        # FIX: Use splitext to safely get the base path (handles .pptx correctly)
         base_path = os.path.splitext(path)[0]
         
         if ext != ".pdf":
             # Convert PPT to PDF
             Ppt2Pdf(base_path, ext[1:]).convert_ppt_to_pdf()
         
-        # Pass the base path (without extension) to the pipeline
-        summary = process_pdf_ppt_pipeline(session_id, current_user["email"], base_path, ext)
+        # Pass original_name to pipeline
+        summary = process_pdf_ppt_pipeline(session_id, current_user["email"], base_path, ext, original_name)
     
     else:
         raise HTTPException(400,"Unsupported")
 
     return {"summary": summary}
+
+@app.post("/api/upload/link")
+def uploadLink(req: LinkUpload, current_user=Depends(get_current_user)):
+    session_id = req.session_id
+    link = req.video_link
+    downloader = VideoDownloader(link)
+    base,ext = downloader.yt_download()
+    path = os.path.join(UPLOAD_DIR,f"{base}{ext}")
+    print(f"{path}")
+    
+    # For links, the original name is the downloaded filename
+    original_name = f"{base}{ext}"
+
+    if ext in video_extensions:
+        # Pass original_name
+        summary = process_video_pipeline(session_id, current_user["email"], path, ext, original_name)
+    
+    elif ext in [".pdf",".ppt",".pptx"]:
+        base_path = os.path.splitext(path)[0]
+        
+        if ext != ".pdf":
+            # Convert PPT to PDF
+            Ppt2Pdf(base_path, ext[1:]).convert_ppt_to_pdf()
+        
+        # Pass original_name
+        summary = process_pdf_ppt_pipeline(session_id, current_user["email"], base_path, ext, original_name)
+    
+    else:
+        raise HTTPException(400,"Unsupported")
+
+    return {"summary": summary}
+
 
 # ============================================================
 # ASK + HISTORY
@@ -260,14 +338,18 @@ def api_ask(req: AskRequest, current_user=Depends(get_current_user)):
     answer = ""
     llm = LLM()
 
+    if not session.get("title"):
+        smart_title = llm.generate_chat_title(req.question)
+        sessions_col.update_one(
+            {"_id": req.session_id}, 
+            {"$set": {"title": smart_title}}
+        )
     # 3. Route the Request (Video vs PDF vs Hybrid)
     try:
         if video_files and not doc_files:
             # SCENARIO A: Only Videos
-            target_video = video_files[-1]["name"] 
-            print(f"Routing to Video DB for: {target_video}")
-            # Ensure LLM class has ask_question_video method!
-            answer = llm.ask_question(target_video, req.question)
+            print(f"Routing to Video DB for session: {req.session_id}")
+            answer = llm.ask_question(req.session_id, req.question, session_id=req.session_id)
 
         elif doc_files and not video_files:
             # SCENARIO B: Only Docs
@@ -275,12 +357,9 @@ def api_ask(req: AskRequest, current_user=Depends(get_current_user)):
             answer = llm.ask_question_ppt_pdf(req.session_id, req.question)
 
         elif video_files and doc_files:
-            # SCENARIO C: Hybrid (Prioritize most recent upload)
-            last_file = files[-1]
-            if last_file['ext'] in video_extensions:
-                 answer = llm.ask_question(last_file["name"], req.question)
-            else:
-                 answer = llm.ask_question_ppt_pdf(req.session_id, req.question)
+            # SCENARIO C: Hybrid (Use both video + docs)
+            print(f"Routing to multimodal QA for session: {req.session_id}")
+            answer = llm.ask_question_multimodal(req.session_id, req.question)
         else:
             answer = "I don't see any files in this session yet. Please upload a PDF, PPT, or Video."
 

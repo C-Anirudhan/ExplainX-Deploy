@@ -4,7 +4,7 @@ import torch
 
 
 class YOLOv8Detector:
-    def __init__(self, model_name="yolov8n.pt"):
+    def __init__(self, model_name="yolo26n.pt"):
         print(f"Loading YOLOv8 model: {model_name} ...")
 
         self.model = YOLO(model_name)
@@ -71,3 +71,5 @@ class YOLOv8Detector:
 
     def export_last_results(self):
         return self.last_results
+if __name__ == "__main__":
+    obj = YOLOv8Detector()

@@ -8,12 +8,13 @@ from sentence_transformers import SentenceTransformer
 
 
 class VectorDB:
-    def __init__(self, name):
+    def __init__(self, name, video_id=None):
         """
-        name = video name WITHOUT .mp4
-        JSON file is expected at: ./langbase_json/{name}.json
+        name = JSON base name in ./langbase_json/{name}.json
+        video_id = metadata id used for retrieval filter (session_id for chat-scoped video retrieval)
         """
         self.name = name
+        self.video_id = video_id or name
         self.CHROMA_DIR = "./chroma_db"
         self.JSON_PATH = f"langbase_json/{name}.json"
         self.COLLECTION_NAME = "videos"
@@ -41,15 +42,15 @@ class VectorDB:
     def ingest_json(self):
         print(f"[INFO] Loading JSON: {self.JSON_PATH}")
         if not os.path.exists(self.JSON_PATH):
-            print(f"❌ ERROR: JSON not found: {self.JSON_PATH}")
+            print(f"ERROR: JSON not found: {self.JSON_PATH}")
             return
 
         with open(self.JSON_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        video_name = data.get("video_name", "unknown_video")
+        video_name = self.video_id
         frames = data.get("frames", [])
-        transcript = data.get("transcript", [])  # ✅ correct key
+        transcript = data.get("transcript", [])
 
         print(f"[INFO] Frames found: {len(frames)}")
         print(f"[INFO] Transcript segments: {len(transcript)}")
@@ -60,7 +61,6 @@ class VectorDB:
         # STORE ALL FRAMES (YOLO + OCR)
         # -----------------------------------------------------
         for fr in frames:
-
             idx = int(fr.get("frame_index", -1))
             ts = float(fr.get("timestamp", 0.0))
 
@@ -92,13 +92,12 @@ class VectorDB:
                 "frame_index": idx,
                 "timestamp": ts
             })
-            ids.append(f"{video_name}::frame::{idx}")
+            ids.append(f"{video_name}::{self.name}::frame::{idx}")
 
         # -----------------------------------------------------
         # STORE TRANSCRIPT
         # -----------------------------------------------------
         for i, seg in enumerate(transcript):
-
             text = seg.get("text", "").strip()
             start = float(seg.get("start", 0.0))
             end = float(seg.get("end", 0.0))
@@ -111,7 +110,7 @@ class VectorDB:
                 "start": start,
                 "end": end
             })
-            ids.append(f"{video_name}::transcript::{i}")
+            ids.append(f"{video_name}::{self.name}::transcript::{i}")
 
         print(f"[INFO] Total documents to ingest: {len(documents)}")
 
@@ -143,7 +142,7 @@ class VectorDB:
                 metadatas=batch_meta
             )
 
-        print("\n🔥 INGESTION COMPLETE — ALL DATA STORED!\n")
+        print("\nINGESTION COMPLETE - ALL DATA STORED\n")
 
     # ---------------------------------------------------------
     # SIMPLE QUERY (optional)
@@ -195,8 +194,8 @@ class VectorDB:
         print("\n====== RESULTS ======\n")
 
         if not docs:
-            print("❗ No results found.\n")
-            return
+            print("No results found.\n")
+            return []
 
         metas = results["metadatas"][0]
         dists = results["distances"][0]
@@ -206,3 +205,5 @@ class VectorDB:
             print(" META:", metas[i])
             print(" DOC:", docs[i][:300], "...\n")
             print("-----------------------------------")
+
+        return docs
