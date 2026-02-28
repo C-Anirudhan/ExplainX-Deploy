@@ -1,88 +1,110 @@
-# dependencies (bun install)
-node_modules
-
-# output
-out
-dist
-*.tgz
-
-# code coverage
-coverage
-*.lcov
-
-Backend/chroma_db/
-Backend/chroma_db_storage/
-**/__pycache__/
-*.mp3
-*.wav
-
-# logs
-logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
-
-# dotenv environment variable files
-.env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
-
-# caches
-.eslintcache
-.cache
-*.tsbuildinfo
-
-# IntelliJ based IDEs
-.idea
-
-# Finder (MacOS) folder config
+# -----------------------------
+# OS / Editor files
+# -----------------------------
 .DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
-e2b.local.toml
-e2b.*.local.toml
+.vscode/
+.idea/
+*.iml
+
+# -----------------------------
+# Logs
+# -----------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# -----------------------------
+# Environment / secrets
+# -----------------------------
+.env
+.env.*
+!.env.example
+
+# -----------------------------
+# Python
+# -----------------------------
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+.venv/
+venv/
+ENV/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+
+.coverage
+.coverage.*
+htmlcov/
+
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+
+# -----------------------------
+# Node / Frontend
+# -----------------------------
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+
+.next/
+.nuxt/
+.svelte-kit/
+
+out/
+dist/
+coverage/
+*.lcov
+*.tsbuildinfo
+.eslintcache
+.cache/
+*.tgz
 
 **/.react-router
 apps/mobile/caches/*
 
-#venv
-venv
+# -----------------------------
+# Vercel / local tool files
+# -----------------------------
+.vercel/
+e2b.local.toml
+e2b.*.local.toml
 
-#models
-yolov8m.pt
-yolov8n.pt
+# -----------------------------
+# Project-generated artifacts
+# -----------------------------
+Backend/downloads/
+Backend/frames/
+Backend/temp/
+Backend/langbase_json/
+Backend/chroma_db/
+Backend/chroma_db_storage/
 
-
-#__pycache__
-__pycache__
-Backend/__pycache__/*
-Backend/__pycache__/*
-
-#downloads
-downloads/*
-Backend/downloads/*
-#frames
-frames/*
-
-#langbase_json
-langbase_json/*
-Backend/langbase_json/*
-
-#temp
-temp/*
-
-#auth.db
+# Databases / generated state
+Backend/auth.db
 auth.db
+*.sqlite3
+Backend/session_data.json
+Backend/extracted_page.json
 
-
-#chroma_db
-Backend/chroma_db/*
-
-#models
-yolov8m.pt
-yolov8n.pt
-
-Backend/chroma_db_storage/*
+# Media / model binaries
 *.mp3
 *.wav
-*.pyc
+*.pt
+
+langbase_json/
