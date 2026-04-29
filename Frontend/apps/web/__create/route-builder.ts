@@ -124,7 +124,10 @@ async function registerRoutes() {
 }
 
 // Initial load
-await registerRoutes();
+const init = async () => {
+  await registerRoutes();
+};
+init();
 
 // Dev reload support (SAFE)
 if (import.meta.env.DEV && import.meta.hot) {
